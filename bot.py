@@ -996,9 +996,7 @@ def handle_start(message):
     )
     bot.send_message(message.chat.id, lang_prompt, reply_markup=get_language_keyboard())
     
-    # Agar foydalanuvchida avval tanlangan til bo'lsa, asosiy menyusini ham yuboramiz
-    if current_lang:
-        send_main_welcome(message.chat.id, user_id, first_name, current_lang)
+
 
 # Tilni o'zgartirish buyrug'i
 @bot.message_handler(commands=['lang', 'language', 'til'])
@@ -1677,7 +1675,7 @@ def run_health_server():
                 self.send_response(200)
                 self.send_header("Content-type", "text/plain; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(b"Elbek Studiya Bot 24/7 Server Faol (v2.2 No Copilot)!")
+                self.wfile.write(b"Elbek Studiya Bot 24/7 Server Faol (v3.0 MultiLang Active)!")
             def log_message(self, format, *args):
                 pass
         with socketserver.TCPServer(("", port), HealthHandler) as httpd:
