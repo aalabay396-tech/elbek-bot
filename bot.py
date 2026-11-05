@@ -332,7 +332,16 @@ def is_bad_response(text: str) -> bool:
     bad_phrases = [
         "copilot moved",
         "install the new copilot",
+        "copilot history and content will be deleted",
         "unifiedlink.svc.cloud.microsoft",
+        "openappstoreonload",
+        "sign in on your pc or mac",
+        "sign in with the same account",
+        "needs ios 26",
+        "android 13 or later",
+        "copilot_migration",
+        "microsoft copilot",
+        "copilot",
         "no cake credits",
         "bake proof-of-work",
         "sign up and repeat your request",
@@ -425,33 +434,30 @@ def ask_gemini(user_id: int, user_prompt: str) -> str:
     if len(user_history[user_id]) > 6:
         user_history[user_id] = [user_history[user_id][0]] + user_history[user_id][-5:]
 
-    # 3. Direct Gemini (API kalitsiz ham avtomatik ishlaydigan Gemini tizimi)
-    providers_and_models = [
-        (g4f.Provider.Gemini, "gemini-2.5-flash"),
-        (None, "gemini-2.5-flash"),
-        (None, "gemini-3.6-flash"),
-    ]
-    for prov, model_name in providers_and_models:
+    # 3. Zaxira modellar (Copilot va Bing butunlay chetlab o'tiladi)
+    models_to_try = ["gemini-2.5-flash", "gpt-4o-mini", "llama-3.3-70b", "deepseek-v3"]
+    for model_name in models_to_try:
         try:
-            kwargs = {
-                "model": model_name,
-                "messages": user_history[user_id]
-            }
-            if prov:
-                kwargs["provider"] = prov
-            res = ai_client.chat.completions.create(**kwargs)
+            res = ai_client.chat.completions.create(
+                model=model_name,
+                messages=user_history[user_id]
+            )
             ans = res.choices[0].message.content
             if ans and not is_bad_response(ans):
+                import re
+                ans = re.sub(r'<FollowUp[^>]*/>', '', ans)
+                ans = re.sub(r'<FollowUp[^>]*>.*?</FollowUp>', '', ans, flags=re.DOTALL)
                 lines = ans.strip().split("\n")
                 if lines and lines[0].strip().startswith("####"):
                     ans = "\n".join(lines[1:]).strip()
-                user_history[user_id].append({"role": "assistant", "content": ans})
-                return ans
+                ans = ans.strip()
+                if not is_bad_response(ans):
+                    user_history[user_id].append({"role": "assistant", "content": ans})
+                    return ans
         except Exception:
             continue
 
-    return "Savolingiz qabul qilindi. Iltimos, yana bir bor aniqlashtirib yozing yoki qo'shiq nomini yuboring."
-
+    return "Savolingiz qabul qilindi. Iltimos, yana bir bor aniqlashtirib yozing yoki boshqa mavzuda savol bering.\n"
 # ==================== O'TA TINIQ RASM CHIZISH (HD) ====================
 def generate_hd_image_url(prompt: str) -> str:
     hd_prompt = f"{prompt}, 8k resolution, highly detailed, photorealistic, cinematic lighting, sharp focus, masterpiece"
@@ -1083,7 +1089,7 @@ def run_health_server():
                 self.send_response(200)
                 self.send_header("Content-type", "text/plain; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(b"Elbek Studiya Bot 24/7 Server Faol!")
+                self.wfile.write(b"Elbek Studiya Bot 24/7 Server Faol (v2.2 No Copilot)!")
             def log_message(self, format, *args):
                 pass
         with socketserver.TCPServer(("", port), HealthHandler) as httpd:
