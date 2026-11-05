@@ -4,3 +4,4 @@ yt-dlp>=2026.10.0
 g4f>=8.9.0
 requests
 aiohttp
+google-generativeai

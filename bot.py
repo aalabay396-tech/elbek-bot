@@ -13,7 +13,9 @@ import telebot
 from telebot import types
 import edge_tts
 import yt_dlp
+import g4f
 from g4f.client import Client
+import requests
 
 if sys.platform == "win32":
     try:
@@ -24,6 +26,7 @@ if sys.platform == "win32":
 
 # ==================== ASOSIY SOZLAMALAR ====================
 BOT_TOKEN = "9060761508:AAHlWfubDseZGYOMcUIJ--Okl5UYn16pS70"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "elbek_master.db")
 TEMP_DIR = os.path.join(BASE_DIR, "temp_media")
@@ -323,6 +326,65 @@ def download_online_mp3(video_url: str):
     return None, None, None, 0
 
 # ==================== TEZKOR VA SOF O'ZBEKCHA AI SAVOL-JAVOB ====================
+def is_bad_response(text: str) -> bool:
+    if not text or len(text.strip()) < 2:
+        return True
+    bad_phrases = [
+        "copilot moved",
+        "install the new copilot",
+        "unifiedlink.svc.cloud.microsoft",
+        "no cake credits",
+        "bake proof-of-work",
+        "sign up and repeat your request",
+        "402 payment required"
+    ]
+    txt_lower = text.lower()
+    return any(p in txt_lower for p in bad_phrases)
+
+def call_official_gemini_api(user_id: int, user_prompt: str, api_key: str) -> str:
+    if not api_key:
+        return None
+    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    for m in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": user_prompt}]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [{
+                    "text": (
+                        "Siz 'Elbek Studiya AI' aqlli yordamchisisiz. "
+                        "Ushbu bot rasman Elbek Studiya, Marufjon Maxramov va Javlonbek Ruziyev tomonidan yaratilgan. "
+                        "Har doim sof, tabiiy, adabiy va go'zal o'zbek tilida, grammatik qoidalarga to'liq amal qilib javob bering. "
+                        "Hech qachon g'alati yoki xato tarjima so'zlarni ishlatmang. "
+                        "Foydalanuvchining savoliga aniq, to'g'ri va xushmuomala bo'lib javob bering."
+                    )
+                }]
+            },
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 2048
+            }
+        }
+        try:
+            r = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=20)
+            if r.status_code == 200:
+                data = r.json()
+                cands = data.get("candidates", [])
+                if cands:
+                    parts = cands[0].get("content", {}).get("parts", [])
+                    if parts and "text" in parts[0]:
+                        ans = parts[0]["text"].strip()
+                        if not is_bad_response(ans):
+                            return ans
+        except Exception:
+            continue
+    return None
+
 def ask_gemini(user_id: int, user_prompt: str) -> str:
     p_clean = user_prompt.strip().lower()
     
@@ -339,7 +401,13 @@ def ask_gemini(user_id: int, user_prompt: str) -> str:
     if any(p_clean == g for g in ["sen kimsan", "isming nima", "kim bu", "nima qila olasan", "haqingda ayt"]):
         return "Men — Elbek Studiya AI yordamchisiman. Ushbu bot rasman Elbek Studiya, Marufjon Maxramov va Javlonbek Ruziyev tomonidan yaratilgan. Savollaringizga to'g'ri javob beraman, qo'shiq va minuslarni topib beraman!"
 
-    # 2. Gemini 2.5 Flash va GPT-4o orqali sof adabiy o'zbek tilida javob
+    # 2. Rasmiy Google Gemini API orqali javob
+    if GEMINI_API_KEY:
+        official_ans = call_official_gemini_api(user_id, user_prompt, GEMINI_API_KEY)
+        if official_ans:
+            return official_ans
+
+    # 3. Zaxira AI orqali (Copilot xatolari qat'iyan filtrlanadi)
     if user_id not in user_history:
         user_history[user_id] = [
             {
@@ -357,14 +425,23 @@ def ask_gemini(user_id: int, user_prompt: str) -> str:
     if len(user_history[user_id]) > 6:
         user_history[user_id] = [user_history[user_id][0]] + user_history[user_id][-5:]
 
-    for model_name in ["gemini-2.5-flash", "gpt-4o-mini"]:
+    # 3. Direct Gemini (API kalitsiz ham avtomatik ishlaydigan Gemini tizimi)
+    providers_and_models = [
+        (g4f.Provider.Gemini, "gemini-2.5-flash"),
+        (None, "gemini-2.5-flash"),
+        (None, "gemini-3.6-flash"),
+    ]
+    for prov, model_name in providers_and_models:
         try:
-            res = ai_client.chat.completions.create(
-                model=model_name,
-                messages=user_history[user_id]
-            )
+            kwargs = {
+                "model": model_name,
+                "messages": user_history[user_id]
+            }
+            if prov:
+                kwargs["provider"] = prov
+            res = ai_client.chat.completions.create(**kwargs)
             ans = res.choices[0].message.content
-            if ans and len(ans.strip()) > 1:
+            if ans and not is_bad_response(ans):
                 lines = ans.strip().split("\n")
                 if lines and lines[0].strip().startswith("####"):
                     ans = "\n".join(lines[1:]).strip()
