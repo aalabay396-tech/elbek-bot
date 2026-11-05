@@ -1121,6 +1121,12 @@ if __name__ == '__main__':
     print("🌐 Server rejimi: 24/7 Bulut va Lokal tayyor")
     print("=" * 65)
     
+    try:
+        bot.remove_webhook()
+        time.sleep(1)
+    except Exception:
+        pass
+
     while True:
         try:
             bot.polling(none_stop=True, interval=0, timeout=20)
