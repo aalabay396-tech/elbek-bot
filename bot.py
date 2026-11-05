@@ -1014,10 +1014,22 @@ def run_health_server():
     except Exception as e:
         pass
 
+def keep_awake_ping():
+    time.sleep(30)
+    url = "https://elbek-studiya-minus-bot.onrender.com"
+    while True:
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'ElbekBotKeepAlive/1.0'})
+            urllib.request.urlopen(req, timeout=15)
+        except Exception:
+            pass
+        time.sleep(600)  # Har 10 minutda 1 marta ping yuborib serverni 24/7 uyg'oq tutadi
+
 if __name__ == '__main__':
     init_db()
     setup_bot_commands()
     threading.Thread(target=run_health_server, daemon=True).start()
+    threading.Thread(target=keep_awake_ping, daemon=True).start()
     print("=" * 65)
     print("🚀 ELBEK STUDIYA & MARUFJON MAXRAMOV & JAVLONBEK RUZIYEV BOT FAOL!")
     print("🤖 Telegram: @ElbekStudiyaMinusbot")
